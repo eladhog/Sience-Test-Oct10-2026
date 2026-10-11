@@ -33,6 +33,16 @@ Scoped to the chemistry unit only — not the full SNC2D course:
 | **Topic training** | Drill any single topic |
 | **Cheat Sheet** | Activity Series, polyatomic ions, prefixes, core rules |
 
+## Lessons
+
+Every topic has a visual walkthrough before you practise it — 49 steps across
+nine lessons, one idea per screen, each carrying a diagram. Reaction types are
+shown as coloured atoms regrouping; balancing uses a live atom tally that updates
+each step; naming uses a criss-cross diagram; the Activity Series lesson ends with
+an interactive picker that builds the real equation for any two metals you choose.
+
+Diagrams are hand-built inline SVG and plain HTML — no charting library, no images.
+
 ## How the questions work
 
 Most questions are **generated at runtime** rather than drawn from a fixed list,
@@ -91,7 +101,8 @@ styles.css      styling
 chem.js         formula formatting, ion tables, naming, Activity Series
 generators.js   runtime question generators
 bank.js         hand-written questions and topic registry
-app.js          quiz engine, grading, scoring, UI
+lessons.js      visual lessons and SVG diagram builders
+app.js          quiz engine, lesson viewer, grading, scoring, UI
 ```
 
 No dependencies, no package manager, no build.

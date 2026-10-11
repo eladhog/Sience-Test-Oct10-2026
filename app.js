@@ -82,6 +82,7 @@ function start(mode, opt){
   else if(mode==='marathon'){ queue=buildQuick(30); label='Marathon'; }
   else { queue=buildRehearsal(); label='Dress Rehearsal'; }
   session = { queue, i:0, results:[], mode, label, started:Date.now(), topic:opt };
+  lesson = null;
   answered=false; chosen=null;
   if(mode==='rehearsal'){ timerId = setInterval(()=>{ const el=$('#timer'); if(el) el.textContent=clock(Date.now()-session.started); },1000); }
   renderQuestion();
@@ -94,17 +95,22 @@ const stripTags = h => String(h).replace(/<[^>]*>/g,'').replace(/&amp;/g,'&');
    ============================================================ */
 function renderHome(){
   if(timerId){ clearInterval(timerId); timerId=null; }
-  session=null;
+  session=null; lesson=null;
   const acc = S.totalQ ? Math.round(100*S.totalC/S.totalQ) : null;
   const topicCards = PRACTICE_TOPICS.map(t=>{
     const T=TOPICS[t], s=S.topics[t]||{c:0,n:0};
     const a = s.n ? Math.round(100*s.c/s.n) : null;
-    return `<button class="mode" onclick="start('topic','${t}')">
+    const seen = (S.learned||[]).includes(t);
+    return `<div class="mode topic">
       <span class="ic">${T.icon}</span>
       <h3>${T.name}</h3>
       <p>${T.blurb}</p>
+      <div class="tactions">
+        <button class="tbtn learn${seen?' seen':''}" onclick="startLesson('${t}')">${seen?'&#10003; Learn again':'&#128218; Learn'}</button>
+        <button class="tbtn" onclick="start('topic','${t}')">Practise</button>
+      </div>
       ${a!==null?`<span class="tag ${a<60?'hot':''}">${a}%</span>`:''}
-    </button>`;
+    </div>`;
   }).join('');
 
   app().innerHTML = `
@@ -127,7 +133,9 @@ function renderHome(){
         <p>30 questions straight through, when you want a long run.</p>
       </button>
     </div>
-    <h2 class="sec">Train one topic</h2>
+    <h2 class="sec">Learn it first, then train it</h2>
+    <p class="sechint">Every topic has a short visual walkthrough &mdash; diagrams, worked examples, one idea per screen.
+      If something feels shaky, hit <b>Learn</b> before you practise it.</p>
     <div class="grid">${topicCards}</div>
     <h2 class="sec">Reference</h2>
     <div class="grid">
@@ -150,6 +158,65 @@ function renderHUD(){
        <button class="ghost" onclick="toggleFocus()">Focus mode</button>`;
 }
 function toggleFocus(){ S.focus=!S.focus; save(); renderHUD(); }
+
+/* ============================================================
+   LESSONS
+   ============================================================ */
+let lesson = null;   /* {topic, i} */
+
+function startLesson(topic, step){
+  if(timerId){ clearInterval(timerId); timerId=null; }
+  session = null;
+  lesson = { topic, i: step||0 };
+  renderLesson();
+}
+function lessonStep(d){
+  const L = LESSONS[lesson.topic];
+  lesson.i = Math.max(0, Math.min(L.steps.length-1, lesson.i + d));
+  renderLesson();
+}
+function finishLesson(){
+  const t = lesson.topic;
+  S.learned = S.learned || [];
+  if(!S.learned.includes(t)) S.learned.push(t);
+  save();
+  start('topic', t);
+}
+function renderLesson(){
+  const L = LESSONS[lesson.topic];
+  const T = TOPICS[lesson.topic];
+  const C2 = COACHES[T.coach];
+  const st = L.steps[lesson.i];
+  const last = lesson.i === L.steps.length-1;
+
+  const dots = L.steps.map((_,i)=>
+    `<span class="dot ${i<lesson.i?'done':i===lesson.i?'now':''}" onclick="lesson.i=${i};renderLesson()"></span>`).join('');
+
+  app().innerHTML = `
+    <div class="qhead">
+      <div class="dots">${dots}</div>
+      <button class="ghost" onclick="renderHome()">Exit</button>
+    </div>
+    <div class="card lesson">
+      <div class="lhead">
+        <span class="lic">${T.icon}</span>
+        <div><div class="ltitle">${L.title}</div>
+             <div class="lsub">${L.sub} &middot; step ${lesson.i+1} of ${L.steps.length}</div></div>
+      </div>
+      <h2 class="lh">${st.h}</h2>
+      <div class="lvis">${st.v}</div>
+      <div class="lbody">${st.b}</div>
+      <div class="actions">
+        ${lesson.i>0?`<button class="btn alt" onclick="lessonStep(-1)">&larr; Back</button>`:''}
+        ${last
+          ? `<button class="btn" onclick="finishLesson()">I get it &mdash; practise this &rarr;</button>
+             <button class="btn alt sm" onclick="renderHome()">Back to the lab</button>`
+          : `<button class="btn" onclick="lessonStep(1)">Next &rarr;</button>`}
+      </div>
+    </div>`;
+  if(st.after && typeof LESSON_HOOKS[st.after]==='function') LESSON_HOOKS[st.after]();
+  renderHUD();
+}
 
 /* ============================================================
    RENDER — QUESTION
@@ -503,8 +570,10 @@ function renderResults(){
   else msg = `<b>This is exactly what practice is for.</b> Getting it wrong here is free &mdash; getting it wrong on the test is not. Start with the lowest bar below and do one topic at a time.`;
 
   const retry = weakest.length
-    ? `<div class="actions"><span style="color:var(--dim);font-size:14px;width:100%">Drill the weak spots:</span>` +
-      weakest.slice(0,3).map(t=>`<button class="btn alt sm" onclick="start('topic','${t}')">${TOPICS[t].name}</button>`).join('') + `</div>`
+    ? `<div class="actions"><span style="color:var(--dim);font-size:14px;width:100%">Weak spots &mdash; learn the idea, then drill it:</span>` +
+      weakest.slice(0,3).map(t=>
+        `<span class="pairbtn"><button class="btn alt sm" onclick="startLesson('${t}')">&#128218; Learn ${TOPICS[t].name}</button>` +
+        `<button class="btn alt sm" onclick="start('topic','${t}')">Drill</button></span>`).join('') + `</div>`
     : '';
 
   app().innerHTML = `
@@ -613,6 +682,11 @@ function showSheet(){
    KEYBOARD
    ============================================================ */
 document.addEventListener('keydown', e=>{
+  if(lesson && !session){
+    if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); lessonStep(1); }
+    if(e.key==='ArrowLeft'){ e.preventDefault(); lessonStep(-1); }
+    return;
+  }
   if(!session) return;
   const tag = document.activeElement && document.activeElement.tagName;
   const typing = tag==='INPUT'||tag==='TEXTAREA';
